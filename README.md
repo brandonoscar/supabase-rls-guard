@@ -39,7 +39,7 @@ rls-guard check FAILED: 4 migration file(s) (1 never applied), 5 tenant-table qu
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: brandonoscar/supabase-rls-guard@v0.1.0
+- uses: brandonoscar/supabase-rls-guard@main   # or pin a commit SHA
   with:
     config: rls-guard.toml
     live-dsn: ${{ secrets.DATABASE_URL }}                 # optional: also check the live catalog
@@ -48,7 +48,7 @@ rls-guard check FAILED: 4 migration file(s) (1 never applied), 5 tenant-table qu
 
 With no `live-dsn`, the live checks are skipped with a notice in the run. `require-live: true` fails the step instead. Set it wherever the secret must be present: pull requests from forks and Dependabot get no secrets, and a misnamed secret is empty too.
 
-Or `pip install "supabase-rls-guard[live] @ git+https://github.com/brandonoscar/supabase-rls-guard@v0.1.0"` (not on PyPI yet) and run `rls-guard check` / `rls-guard live` yourself. Exit codes: 0 clean, 1 findings, **2 could not run**. Treat 2 as a failure: a check that didn't run (no database URL, an unreadable or mistyped config, a schema that doesn't exist) checked nothing.
+Or `pip install "supabase-rls-guard[live] @ git+https://github.com/brandonoscar/supabase-rls-guard"` (not on PyPI yet) and run `rls-guard check` / `rls-guard live` yourself. Exit codes: 0 clean, 1 findings, **2 could not run**. Treat 2 as a failure: a check that didn't run (no database URL, an unreadable or mistyped config, a schema that doesn't exist) checked nothing.
 
 ## Configure it
 
