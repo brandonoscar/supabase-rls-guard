@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  test:
+    name: Tests (Python ${{ matrix.python }}, Postgres 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # The live tests (real RLS policies, read as real users) must run here;
+      # a missing DSN fails the job instead of skipping them.
+      RLS_GUARD_TEST_DSN: postgresql://postgres@localhost:5432/postgres
+      RLS_GUARD_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  core:
+    name: Static checks need no dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: rls-guard check --config examples/app/rls-guard.toml
+      - run: |
+          pip install pytest pytest-asyncio
+          pytest
+
+  action:
+    name: The GitHub Action, on the example app
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./
+        with:
+          config: examples/app/rls-guard.toml
+      - name: An empty live-dsn with require-live fails the step
+        id: required
+        continue-on-error: true
+        uses: ./
+        with:
+          config: examples/app/rls-guard.toml
+          require-live: "true"
+      - name: Check that it failed
+        env:
+          OUTCOME: ${{ steps.required.outcome }}
+        run: |
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "require-live with no live-dsn should fail, got $OUTCOME"; exit 1
+          fi
+      - name: A table without RLS fails the guard
+        run: |
+          echo "create table public.app_leads (id uuid primary key);" \
+            > examples/app/supabase/migrations/0099_leads.sql
+          set +e
+          rls-guard check --config examples/app/rls-guard.toml
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then echo "expected exit 1, got $code"; exit 1; fi
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        run: |
+          set -euo pipefail
+          VERSION=8.24.3
+          curl -sSL --retry 3 --retry-delay 2 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --redact --verbose --no-banner

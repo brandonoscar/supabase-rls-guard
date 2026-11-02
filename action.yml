@@ -1,0 +1,59 @@
+name: supabase-rls-guard
+description: Fail CI on tables without row-level security, views that bypass it, and tenant queries without the tenant column.
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  config:
+    description: Path to rls-guard.toml
+    default: rls-guard.toml
+  live-dsn:
+    description: >-
+      Database URL for the catalog checks. Pass a secret. When it is empty the
+      live checks are skipped with a notice, unless require-live is true.
+    default: ""
+  require-live:
+    description: >-
+      "true" fails the step when live-dsn is empty. Set it wherever the secret
+      must be there (a schedule, a push to main): a missing or misnamed secret,
+      and pull requests from forks or Dependabot, which get no secrets, would
+      otherwise skip the live checks.
+    default: "false"
+  python-version:
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+    # Inputs reach the shell through env, never pasted into the script, so a
+    # path with a quote or a $( ) in it stays a path.
+    - name: Install rls-guard
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: pip install --quiet "${ACTION_PATH}[live]"
+    - name: Static checks
+      shell: bash
+      env:
+        RLS_GUARD_CONFIG: ${{ inputs.config }}
+      run: rls-guard check --config "$RLS_GUARD_CONFIG"
+    - name: Live checks
+      shell: bash
+      env:
+        RLS_GUARD_DSN: ${{ inputs.live-dsn }}
+        RLS_GUARD_CONFIG: ${{ inputs.config }}
+        REQUIRE_LIVE: ${{ inputs.require-live }}
+      run: |
+        if [ -z "$RLS_GUARD_DSN" ]; then
+          if [ "$REQUIRE_LIVE" = "true" ]; then
+            echo "::error::rls-guard live could not run: live-dsn is empty. Not a pass."
+            exit 2
+          fi
+          echo "::notice::rls-guard live checks skipped: no live-dsn. Set require-live: true where the secret must be present."
+          exit 0
+        fi
+        rls-guard live --config "$RLS_GUARD_CONFIG"

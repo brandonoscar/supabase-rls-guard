@@ -1,0 +1,21 @@
+# rls-guard configuration for the example app. Paths are relative to this file.
+
+[migrations]
+paths = ["supabase/migrations/*.sql"]
+schemas = ["public"]
+
+[scoping]
+sources = ["src/**/*.py"]
+tables = '\bapp_[a-z_]+\b'
+tenant_column = "company_id"
+# The scan must find at least this many queries, or a broken glob would pass.
+min_queries = 4
+
+[[scoping.allow]]
+path = "src/app/notes.py"
+fingerprint = "6b6784c33a"
+reason = "Fleet-wide note count for the ops dashboard: a number, never row content"
+
+[live]
+schemas = ["public"]
+rls_off_allowlist = []

@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "supabase-rls-guard"
+version = "0.1.0"
+description = "CI guards for multi-tenant Postgres and Supabase: RLS on every table, no view around it, no query without the tenant column, and helpers that prove one tenant cannot read another's rows."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Brandon Oscar" }]
+keywords = ["supabase", "postgres", "rls", "row-level-security", "multi-tenant", "security", "ci"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+# The static checks need only the standard library; the live checks need asyncpg.
+dependencies = []
+
+[project.optional-dependencies]
+live = ["asyncpg>=0.30"]
+dev = [
+    "asyncpg>=0.30",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+rls-guard = "rls_guard.cli:main"
+
+[project.urls]
+Source = "https://github.com/brandonoscar/supabase-rls-guard"
+Issues = "https://github.com/brandonoscar/supabase-rls-guard/issues"
+Changelog = "https://github.com/brandonoscar/supabase-rls-guard/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rls_guard"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = ["postgres: needs a Postgres database (RLS_GUARD_TEST_DSN)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["examples/app"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "ASYNC", "PT"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
